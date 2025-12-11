@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/docs/" />
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/Portfolio/Portfolio.Client/Portfolio.Client.csproj" Id="2c0653be-0ab6-4d7c-926f-4bffc2d36d47" />
+  <Project Path="src/Portfolio/Portfolio/Portfolio.csproj" Id="7004b4fa-2ec4-44fb-91b7-b9313a3977f9" />
+</Solution>
