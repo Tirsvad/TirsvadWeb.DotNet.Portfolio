@@ -5,9 +5,9 @@
 | Title       | Sign in using a client certificate |
 | Level       | User Goal   |
 
-## TOC
+## Table of Contents
 - [User Story](#user-story)
-- [Use Case Breif](#use-case-breif)
+- [Use Case Brief](#use-case-brief)
   - [Primary Actor](#primary-actor)
   - [Stakeholders and Interests](#stakeholders-and-interests)
   - [Preconditions](#preconditions)
@@ -20,12 +20,16 @@
 - [OC - Operations Contracts](#oc---operations-contracts)
 - [Related artifacts](#links-to-related-artifacts)
 
+---
+
 ## User Story
 As a user, 
 I want to sign in to a web application using a client certificate
 so that I can securely authenticate without using a password.
 
-## Use Case Breif
+---
+
+## Use Case Brief
 ### Metadata
 | Element     | Description |
 |-------------|-------------|
@@ -65,6 +69,8 @@ so that I can securely authenticate without using a password.
 ### Notes
 - Client certificate authentication enhances security by eliminating the need for passwords, reducing the risk of phishing attacks.
 
+---
+
 ## Use Case Casual
 
 This casual (alternate) use case describes the two main outcomes when a user attempts to authenticate with a client certificate: success or failure.
@@ -78,7 +84,7 @@ This casual (alternate) use case describes the two main outcomes when a user att
 ### Primary Flow — Successful Authentication
 1. User navigates to the web application.
 2. System requests a client certificate from the user's browser/OS.
-3. User selects and sends a valid client certificate.
+3. User selects and sends a client certificate.
 4. System validates the certificate chain, revocation status, and matching subject (or mapped account).
 5. System authenticates the user and establishes an authenticated session.
 6. System logs the authentication event (audit entry).
@@ -101,6 +107,35 @@ Postconditions:
 - For locked or blocked accounts, the system should surface guidance for remediation (account unlock, certificate re-issuance).
 - Provide clear user-facing guidance to reduce support calls (how to install certificates, supported browsers/OS).
 
+---
+
+## SSD - System Sequence Diagram
+### Metadata
+| Element     | Description |
+|-------------|-------------|
+| ID          | UC001-SSD   |
+| Title       | Sign in using a client certificate - System Sequence Diagram |
+| Cross reference | [Use Case Brief](#use-case-casual) |
+
+### Diagram
+```mermaid
+sequenceDiagram
+  Actor User
+  participant System
+
+  User->>System: Navigate to web application
+  System->>User: Request client certificate
+  User->>System: ValidateCertificate(certificate)
+  alt Valid Certificate
+    System->>User: Authenticate and establish session
+    System->>System: Log authentication event
+  else Invalid/No Certificate
+    System->>User: Deny authentication, display error message
+    System->>System: Log authentication failure
+  end
+```
+
+---
 
 <!-- Links to related artifacts can be added here -->
 [TR001]: https://github.com/TirsvadWeb/DotNet.Portfolio/blob/main/docs/RiscAnalyze.md#technical-risk
