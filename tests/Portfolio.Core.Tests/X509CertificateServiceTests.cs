@@ -7,6 +7,11 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace Portfolio.Core.Tests;
 
+
+/// <summary>
+/// Tests for <see cref="X509CertificateService"/>
+/// 
+/// </summary>
 [TestClass]
 [TestCategory("Functional")]
 // [DoNotParallelize]
@@ -39,7 +44,7 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void GetCertificateByName_ReturnsCertificate_WhenFriendlyNameMatches()
+    public async Task GetCertificateByName_ReturnsCertificate_WhenFriendlyNameMatches()
     {
         string name = TestPrefix + "Friendly" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -47,7 +52,7 @@ public class X509CertificateServiceTests
         {
             AddCertificateToStore(cert);
 
-            X509Certificate2? found = _service.GetCertificateByName(name);
+            X509Certificate2? found = await _service.GetCertificateByNameAsync(name);
 
             Assert.IsNotNull(found, "Expected certificate to be found by friendly name.");
             Assert.AreEqual(cert.Thumbprint, found!.Thumbprint, ignoreCase: true);
@@ -60,7 +65,7 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void GetPreloadedCertificate_ReturnsCertificate_WhenPreloadedExists()
+    public async Task GetPreloadedCertificate_ReturnsCertificate_WhenPreloadedExists()
     {
         string name = PredefinedName;
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -68,7 +73,7 @@ public class X509CertificateServiceTests
         {
             AddCertificateToStore(cert);
 
-            X509Certificate2? found = _service.GetPreloadedCertificate();
+            X509Certificate2? found = await _service.GetPreloadedCertificateAsync();
 
             Assert.IsNotNull(found, "Expected preloaded certificate to be found when present.");
             Assert.AreEqual(cert.Thumbprint, found!.Thumbprint, ignoreCase: true);
@@ -81,15 +86,15 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void GetCertificateByName_ReturnsNull_ForInvalidInput()
+    public async Task GetCertificateByName_ReturnsNull_ForInvalidInput()
     {
-        Assert.IsNull(_service.GetCertificateByName(null!));
-        Assert.IsNull(_service.GetCertificateByName(string.Empty));
-        Assert.IsNull(_service.GetCertificateByName("   "));
+        Assert.IsNull(await _service.GetCertificateByNameAsync(null!));
+        Assert.IsNull(await _service.GetCertificateByNameAsync(string.Empty));
+        Assert.IsNull(await _service.GetCertificateByNameAsync("   "));
     }
 
     [TestMethod]
-    public void ThreadSafety_ConcurrentCalls_DoNotThrow_AndReturnConsistentResults()
+    public async Task ThreadSafety_ConcurrentCalls_DoNotThrow_AndReturnConsistentResults()
     {
         string name = TestPrefix + "Concurrent" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -99,22 +104,34 @@ public class X509CertificateServiceTests
 
             const int tasks = 50;
             X509Certificate2?[] results = new X509Certificate2?[tasks];
-            List<Exception> exceptions = new();
+            List<Exception> exceptions = [];
 
-            Parallel.For(0, tasks, i =>
+            // Launch asynchronous tasks properly and await them. Using `Parallel.For` with
+            // an async delegate results in fire-and-forget behavior and the loop will
+            // complete before the async work finishes which can leave `results` with
+            // many null entries. Use Task.Run and await Task.WhenAll to ensure all
+            // concurrent lookups complete before asserting results.
+            Task[] workerTasks = new Task[tasks];
+            for (int j = 0; j < tasks; j++)
             {
-                try
+                int idx = j;
+                workerTasks[idx] = Task.Run(async () =>
                 {
-                    results[i] = _service.GetCertificateByName(name);
-                }
-                catch (Exception ex)
-                {
-                    lock (exceptions)
+                    try
                     {
-                        exceptions.Add(ex);
+                        results[idx] = await _service.GetCertificateByNameAsync(name);
                     }
-                }
-            });
+                    catch (Exception ex)
+                    {
+                        lock (exceptions)
+                        {
+                            exceptions.Add(ex);
+                        }
+                    }
+                });
+            }
+
+            await Task.WhenAll(workerTasks);
 
             Assert.IsEmpty(exceptions, "No exceptions should bubble up from concurrent calls.");
             Assert.IsTrue(results.All(r => r != null), "All concurrent calls should find the certificate.");
@@ -131,7 +148,7 @@ public class X509CertificateServiceTests
     [TestMethod]
     [TestCategory("Benchmark")]
     [DoNotParallelize]
-    public void Performance_MultipleCalls_CompleteWithinThreshold()
+    public async Task Performance_MultipleCalls_CompleteWithinThreshold()
     {
         string name = TestPrefix + "Perf" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -142,7 +159,7 @@ public class X509CertificateServiceTests
             Stopwatch sw = Stopwatch.StartNew();
             for (int i = 0; i < _calls; i++)
             {
-                _ = _service.GetCertificateByName(name);
+                _ = _service.GetCertificateByNameAsync(name);
             }
 
             sw.Stop();
@@ -157,7 +174,7 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void MultiSession_AddRemoveRepeat_ServiceBehavesCorrectly()
+    public async Task MultiSession_AddRemoveRepeat_ServiceBehavesCorrectly()
     {
         // Repeatedly add and remove certificate to ensure the service responds to new sessions
         string name = TestPrefix + "MultiSession" + Guid.NewGuid().ToString("N");
@@ -168,7 +185,9 @@ public class X509CertificateServiceTests
             try
             {
                 AddCertificateToStore(cert);
-                X509Certificate2? found = _service.GetCertificateByName(name);
+                // Allow OS/store to surface the newly added certificate before lookup.
+                Thread.Sleep(50);
+                X509Certificate2? found = await _service.GetCertificateByNameAsync(name);
                 Assert.IsNotNull(found, $"Iteration {i}: expected certificate to be found after adding.");
             }
             finally
@@ -177,13 +196,13 @@ public class X509CertificateServiceTests
                 RemoveCertificatesByFriendlyName(name);
             }
 
-            X509Certificate2? missing = _service.GetCertificateByName(name);
+            X509Certificate2? missing = await _service.GetCertificateByNameAsync(name);
             Assert.IsNull(missing, $"Iteration {i}: expected certificate to be not found after removal.");
         }
     }
 
     [TestMethod]
-    public void Stress_DoesNotThrow_UnderConcurrentAddRemove()
+    public async Task Stress_DoesNotThrow_UnderConcurrentAddRemove()
     {
         // This test tries to stress the certificate store by concurrently adding/removing certs
         // while calling into the service to ensure exceptions are swallowed and no crash occurs.
@@ -193,14 +212,14 @@ public class X509CertificateServiceTests
         const int iterations = 50;
 
         CancellationTokenSource tokenSource = new();
-        List<Task> tasks = new();
+        List<Task> tasks = [];
         ConcurrentQueue<Exception> exceptions = new();
 
         // Start background workers that rapidly add and remove certificates
         for (int w = 0; w < workerCount; w++)
         {
             int workerId = w;
-            tasks.Add(Task.Run(() =>
+            tasks.Add(Task.Run(async () =>
             {
                 try
                 {
@@ -223,7 +242,7 @@ public class X509CertificateServiceTests
         }
 
         // Concurrently call into the service while the workers are mutating the store
-        tasks.Add(Task.Run(() =>
+        tasks.Add(Task.Run(async () =>
         {
             try
             {
@@ -233,7 +252,7 @@ public class X509CertificateServiceTests
                     string name = (i % 2 == 0) ? (nameBase + "-0-" + (i % iterations)) : (nameBase + "-noexist-" + i);
                     try
                     {
-                        _ = _service.GetCertificateByName(name);
+                        _ = await _service.GetCertificateByNameAsync(name);
                     }
                     catch (Exception ex)
                     {
@@ -246,13 +265,13 @@ public class X509CertificateServiceTests
             catch (OperationCanceledException) { }
         }, tokenSource.Token));
 
-        Task.WaitAll(tasks.ToArray());
+        Task.WaitAll([.. tasks]);
 
         Assert.IsTrue(exceptions.IsEmpty, "No exceptions should escape during concurrent add/remove and service calls.");
     }
 
     [TestMethod]
-    public void CacheInvalidation_PositiveEntry_RemovedFromStore_ServiceReturnsNullAfterRemoval()
+    public async Task CacheInvalidation_PositiveEntry_RemovedFromStore_ServiceReturnsNullAfterRemovalAsync()
     {
         string name = TestPrefix + "CachePos" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -261,14 +280,14 @@ public class X509CertificateServiceTests
             AddCertificateToStore(cert);
 
             // First call should find and cache the certificate
-            X509Certificate2? found = _service.GetCertificateByName(name);
+            X509Certificate2? found = await _service.GetCertificateByNameAsync(name);
             Assert.IsNotNull(found, "Expected certificate to be found and cached after adding.");
 
             // Remove from store and ensure subsequent lookup does not return a stale cached copy
             RemoveCertificatesByFriendlyName(name);
             Thread.Sleep(50); // small delay to allow store changes to be observed
 
-            X509Certificate2? missing = _service.GetCertificateByName(name);
+            X509Certificate2? missing = await _service.GetCertificateByNameAsync(name);
             Assert.IsNull(missing, "Expected certificate to be not found after removal (cache invalidated).");
         }
         finally
@@ -279,11 +298,11 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void CacheInvalidation_NegativeEntry_NewlyAdded_Discovered()
+    public async Task CacheInvalidation_NegativeEntry_NewlyAdded_Discovered()
     {
         string name = TestPrefix + "CacheNeg" + Guid.NewGuid().ToString("N");
         // Ensure negative result is cached
-        X509Certificate2? notFound = _service.GetCertificateByName(name);
+        X509Certificate2? notFound = await _service.GetCertificateByNameAsync(name);
         Assert.IsNull(notFound, "Expected initial lookup to be null for a non-existent certificate.");
 
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -293,7 +312,7 @@ public class X509CertificateServiceTests
             Thread.Sleep(50); // allow store to update
 
             // Service should discover the newly added cert even if a null was cached previously
-            X509Certificate2? found = _service.GetCertificateByName(name);
+            X509Certificate2? found = await _service.GetCertificateByNameAsync(name);
             Assert.IsNotNull(found, "Expected service to discover newly added certificate despite prior negative cache.");
             Assert.AreEqual(cert.Thumbprint, found!.Thumbprint, ignoreCase: true);
         }
@@ -305,7 +324,7 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void ConcurrentCache_WarmCache_ManyReadersReturnSameThumbprint()
+    public async Task ConcurrentCache_WarmCache_ManyReadersReturnSameThumbprintAsync()
     {
         string name = TestPrefix + "CacheConcurrent" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -314,28 +333,37 @@ public class X509CertificateServiceTests
             AddCertificateToStore(cert);
 
             // Warm the cache
-            X509Certificate2? warm = _service.GetCertificateByName(name);
+            X509Certificate2? warm = await _service.GetCertificateByNameAsync(name);
             Assert.IsNotNull(warm, "Expected warmup lookup to find the certificate.");
             string expectedThumb = warm!.Thumbprint;
 
             const int readers = 100;
             X509Certificate2?[] results = new X509Certificate2?[readers];
-            List<Exception> exceptions = new();
+            List<Exception> exceptions = [];
 
-            Parallel.For(0, readers, i =>
+            // Launch tasks and await them. Avoid using Parallel.For with async lambdas
+            // because Parallel.For does not await async delegates (they become fire-and-forget).
+            Task[] tasks = new Task[readers];
+            for (int i = 0; i < readers; i++)
             {
-                try
+                int idx = i;
+                tasks[idx] = Task.Run(async () =>
                 {
-                    results[i] = _service.GetCertificateByName(name);
-                }
-                catch (Exception ex)
-                {
-                    lock (exceptions)
+                    try
                     {
-                        exceptions.Add(ex);
+                        results[idx] = await _service.GetCertificateByNameAsync(name);
                     }
-                }
-            });
+                    catch (Exception ex)
+                    {
+                        lock (exceptions)
+                        {
+                            exceptions.Add(ex);
+                        }
+                    }
+                });
+            }
+
+            await Task.WhenAll(tasks);
 
             Assert.IsEmpty(exceptions, "Concurrent readers should not throw.");
             Assert.IsTrue(results.All(r => r != null), "All readers should find the certificate.");
@@ -351,7 +379,7 @@ public class X509CertificateServiceTests
     [TestMethod]
     [TestCategory("Benchmark")]
     [DoNotParallelize]
-    public void Cache_HotPath_Latency_Benchmark()
+    public async Task Cache_HotPath_Latency_Benchmark()
     {
         string name = TestPrefix + "HotPath" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -360,14 +388,14 @@ public class X509CertificateServiceTests
             AddCertificateToStore(cert);
 
             // Warm the cache so the hot-path is exercised
-            X509Certificate2? warm = _service.GetCertificateByName(name);
+            X509Certificate2? warm = await _service.GetCertificateByNameAsync(name);
             Assert.IsNotNull(warm, "Expected warmup lookup to find the certificate.");
 
             //const int calls = 100;
             Stopwatch sw = Stopwatch.StartNew();
             for (int i = 0; i < _calls; i++)
             {
-                _ = _service.GetCertificateByName(name);
+                _ = _service.GetCertificateByNameAsync(name);
             }
 
             sw.Stop();
@@ -383,7 +411,7 @@ public class X509CertificateServiceTests
     }
 
     [TestMethod]
-    public void Cache_Warm_MultipleReaders_AgreeOnThumbprint()
+    public async Task Cache_Warm_MultipleReaders_AgreeOnThumbprint()
     {
         string name = TestPrefix + "CacheSmall" + Guid.NewGuid().ToString("N");
         X509Certificate2 cert = CreateSelfSignedCertificate(name, friendlyName: name);
@@ -392,28 +420,37 @@ public class X509CertificateServiceTests
             AddCertificateToStore(cert);
 
             // Warm the cache
-            X509Certificate2? warm = _service.GetCertificateByName(name);
+            X509Certificate2? warm = await _service.GetCertificateByNameAsync(name);
             Assert.IsNotNull(warm, "Expected warmup lookup to find the certificate.");
             string expectedThumb = warm!.Thumbprint;
 
             const int readers = 50;
             X509Certificate2?[] results = new X509Certificate2?[readers];
-            List<Exception> exceptions = new();
+            List<Exception> exceptions = [];
 
-            Parallel.For(0, readers, i =>
+            // Launch tasks and await them. Avoid using Parallel.For with async lambdas
+            // because Parallel.For does not await async delegates (they become fire-and-forget).
+            Task[] tasks = new Task[readers];
+            for (int i = 0; i < readers; i++)
             {
-                try
+                int idx = i;
+                tasks[idx] = Task.Run(async () =>
                 {
-                    results[i] = _service.GetCertificateByName(name);
-                }
-                catch (Exception ex)
-                {
-                    lock (exceptions)
+                    try
                     {
-                        exceptions.Add(ex);
+                        results[idx] = await _service.GetCertificateByNameAsync(name);
                     }
-                }
-            });
+                    catch (Exception ex)
+                    {
+                        lock (exceptions)
+                        {
+                            exceptions.Add(ex);
+                        }
+                    }
+                });
+            }
+
+            await Task.WhenAll(tasks);
 
             Assert.IsEmpty(exceptions, "Concurrent readers should not throw.");
             Assert.IsTrue(results.All(r => r != null), "All readers should find the certificate.");
@@ -484,7 +521,7 @@ public class X509CertificateServiceTests
             store.Open(OpenFlags.ReadWrite);
 
             string expectedSuffix = "|" + _testInstanceId;
-            List<X509Certificate2> matches = store.Certificates.Cast<X509Certificate2>().Where(c =>
+            List<X509Certificate2> matches = [.. store.Certificates.Cast<X509Certificate2>().Where(c =>
             {
                 if (string.IsNullOrEmpty(c.FriendlyName))
                 {
@@ -505,7 +542,7 @@ public class X509CertificateServiceTests
 
                 return false;
 
-            }).ToList();
+            })];
 
             foreach (X509Certificate2? c in matches)
             {
@@ -528,14 +565,14 @@ public class X509CertificateServiceTests
 
             string expectedSuffix = "|" + _testInstanceId;
 
-            List<X509Certificate2> matches = store.Certificates.Cast<X509Certificate2>().Where(c =>
+            List<X509Certificate2> matches = [.. store.Certificates.Cast<X509Certificate2>().Where(c =>
                 // Certificates created by this test instance have our suffix on FriendlyName
                 (!string.IsNullOrEmpty(c.FriendlyName) && c.FriendlyName.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
                 // Also remove predefined cert created by this instance (FriendlyName could be PredefinedName|instance)
                 || (!string.IsNullOrEmpty(c.FriendlyName) && c.FriendlyName.Equals($"{PredefinedName}{expectedSuffix}", StringComparison.OrdinalIgnoreCase))
                 // Also consider subject-based matches only if FriendlyName contains our instance id
                 || (!string.IsNullOrEmpty(c.Subject) && c.Subject.Contains($"CN={PredefinedName}", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(c.FriendlyName) && c.FriendlyName.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
-            ).ToList();
+            )];
 
             foreach (X509Certificate2? c in matches)
             {

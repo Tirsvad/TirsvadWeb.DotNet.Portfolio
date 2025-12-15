@@ -66,14 +66,15 @@ public class X509CertificateService : IX509CertificateService
     // Inline: guard dictionary used to prevent duplicate concurrent validations per subject.
     private readonly ConcurrentDictionary<string, byte> _validationRunning = new(StringComparer.OrdinalIgnoreCase);
 
+
     /// <inheritdoc/>
-    public X509Certificate2? GetPreloadedCertificate()
+    public Task<X509Certificate2?> GetPreloadedCertificateAsync()
     {
-        return GetCertificateByName(PredefinedCertName);
+        return GetCertificateByNameAsync(PredefinedCertName);
     }
 
     /// <inheritdoc/>
-    public X509Certificate2? GetCertificateByName(string subjectName)
+    public async Task<X509Certificate2?> GetCertificateByNameAsync(string subjectName)
     {
         if (string.IsNullOrWhiteSpace(subjectName))
         {
@@ -152,74 +153,82 @@ public class X509CertificateService : IX509CertificateService
 
         try
         {
-            using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
-            try
+            // Offload blocking store operations to a background thread pool thread to avoid blocking callers.
+            return await Task.Run(() =>
             {
-                store.Open(OpenFlags.ReadOnly);
-
-                // Optimized lookup: use the built-in Find API instead of enumerating every certificate.
-                X509Certificate2Collection found = store.Certificates.Find(X509FindType.FindBySubjectName, subjectName, validOnly: false);
-                Debug.WriteLine($"GetCertificateByName: fresh lookup by subject '{subjectName}' returned {(found?.Count ?? 0)} results.");
-
-                List<X509Certificate2> candidates = new();
-
-                if (found != null && found.Count > 0)
+                using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
+                try
                 {
-                    candidates.AddRange(found.Cast<X509Certificate2>());
-                }
+                    store.Open(OpenFlags.ReadOnly);
 
-                // Additional friendly name matching for certificates that may not be found by subject name
-                // (this is typically fast since we only iterate the small result set when Find returned nothing)
-                if (candidates.Count == 0)
-                {
-                    foreach (X509Certificate2 c in store.Certificates)
+                    // Optimized lookup: use the built-in Find API instead of enumerating every certificate.
+                    X509Certificate2Collection found = store.Certificates.Find(X509FindType.FindBySubjectName, subjectName, validOnly: false);
+                    Debug.WriteLine($"GetCertificateByName: fresh lookup by subject '{subjectName}' returned {(found?.Count ?? 0)} results.");
+
+                    List<X509Certificate2> candidates = [];
+
+                    if (found != null && found.Count > 0)
                     {
-                        if (!string.IsNullOrWhiteSpace(c.FriendlyName) && string.Equals(c.FriendlyName, subjectName, StringComparison.OrdinalIgnoreCase))
+                        candidates.AddRange(found.Cast<X509Certificate2>());
+                    }
+
+                    // Additional friendly name matching for certificates that may not be found by subject name
+                    // (this is typically fast since we only iterate the small result set when Find returned nothing)
+                    if (candidates.Count == 0)
+                    {
+                        foreach (X509Certificate2 c in store.Certificates)
                         {
-                            candidates.Add(c);
+                            if (!string.IsNullOrWhiteSpace(c.FriendlyName) && string.Equals(c.FriendlyName, subjectName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                candidates.Add(c);
+                            }
                         }
                     }
-                }
 
-                if (candidates.Count == 0)
-                {
-                    // Cache miss -> cache negative result to avoid repeated full scans
-                    _cache[subjectName] = null;
-                    Debug.WriteLine($"GetCertificateByName: no candidates found for '{subjectName}' - caching negative result.");
+                    if (candidates.Count == 0)
+                    {
+                        // Cache miss -> cache negative result to avoid repeated full scans
+                        _cache[subjectName] = null;
+                        Debug.WriteLine($"GetCertificateByName: no candidates found for '{subjectName}' - caching negative result.");
+                        return null;
+                    }
+
+                    // Prefer certificates with a private key and the most recent expiry date
+                    X509Certificate2? best = candidates
+                        .OrderByDescending(c => c.NotAfter)
+                        .FirstOrDefault(c => c.HasPrivateKey)
+                        ?? candidates.OrderByDescending(c => c.NotAfter).FirstOrDefault();
+
+                    if (best != null)
+                    {
+                        // Attempt to export a PFX payload for quick reconstruction on the hot path.
+                        byte[]? export = null;
+                        try
+                        {
+                            // Export may fail for non-exportable keys; swallow errors and continue without export.
+                            export = best.Export(X509ContentType.Pfx, string.Empty);
+                            Debug.WriteLine($"GetCertificateByName: export succeeded for '{subjectName}', size={export?.Length ?? 0}.");
+                        }
+                        catch { Debug.WriteLine($"GetCertificateByName: export failed for '{subjectName}'."); }
+
+                        // Cache a small immutable DTO with optional exported bytes.
+                        CertificateCacheEntry entry = new(best.Thumbprint, best.NotAfter, best.HasPrivateKey, export);
+                        _cache[subjectName] = entry;
+                        Debug.WriteLine($"GetCertificateByName: cached entry for '{subjectName}' (HasExport={(export != null)}).");
+
+                        // NOTE: reconstructing from export so returned instance is independent of the store
+                        return export != null
+                            ? new X509Certificate2(export)
+                            : new X509Certificate2(best);
+                    }
+
                     return null;
                 }
-
-                // Prefer certificates with a private key and the most recent expiry date
-                X509Certificate2? best = candidates
-                    .OrderByDescending(c => c.NotAfter)
-                    .FirstOrDefault(c => c.HasPrivateKey)
-                    ?? candidates.OrderByDescending(c => c.NotAfter).FirstOrDefault();
-
-                if (best != null)
+                finally
                 {
-                    // Attempt to export a PFX payload for quick reconstruction on the hot path.
-                    byte[]? export = null;
-                    try
-                    {
-                        // Export may fail for non-exportable keys; swallow errors and continue without export.
-                        export = best.Export(X509ContentType.Pfx, string.Empty);
-                        Debug.WriteLine($"GetCertificateByName: export succeeded for '{subjectName}', size={export?.Length ?? 0}.");
-                    }
-                    catch { Debug.WriteLine($"GetCertificateByName: export failed for '{subjectName}'."); }
-
-                    // Cache a small immutable DTO with optional exported bytes.
-                    CertificateCacheEntry entry = new(best.Thumbprint, best.NotAfter, best.HasPrivateKey, export);
-                    _cache[subjectName] = entry;
-                    Debug.WriteLine($"GetCertificateByName: cached entry for '{subjectName}' (HasExport={(export != null)}).");
-
-                    // NOTE: reconstructing from export so returned instance is independent of the store
-                    return export != null ? new X509Certificate2(export) : new X509Certificate2(best);
+                    try { store.Close(); } catch { }
                 }
-            }
-            finally
-            {
-                try { store.Close(); } catch { }
-            }
+            });
         }
         catch
         {

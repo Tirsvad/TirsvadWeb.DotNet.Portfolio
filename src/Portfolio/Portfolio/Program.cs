@@ -78,7 +78,7 @@ public class Program
             try
             {
                 IX509CertificateService? certService = context.RequestServices.GetService<IX509CertificateService>();
-                X509Certificate2? cert = certService?.GetPreloadedCertificate();
+                X509Certificate2? cert = certService?.GetPreloadedCertificateAsync().ConfigureAwait(false).GetAwaiter().GetResult();
                 if (cert != null)
                 {
                     context.Items["PreloadedX509Certificate"] = cert;
@@ -110,13 +110,13 @@ public class Program
                                 }
                             }
 
-                            List<Claim> claims = new()
-                            {
+                            List<Claim> claims =
+                            [
                                 new Claim(ClaimTypes.Name, cert.Subject ?? string.Empty),
                                 new Claim("thumbprint", cert.Thumbprint ?? string.Empty),
                                 new Claim("issuer", cert.Issuer ?? string.Empty),
                                 new Claim("serialNumber", cert.SerialNumber ?? string.Empty)
-                            };
+                            ];
 
                             ClaimsIdentity identity = new(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                             ClaimsPrincipal principal = new(identity);
