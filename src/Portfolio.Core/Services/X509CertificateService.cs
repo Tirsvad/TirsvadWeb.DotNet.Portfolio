@@ -217,9 +217,21 @@ public class X509CertificateService : IX509CertificateService
                         Debug.WriteLine($"GetCertificateByName: cached entry for '{subjectName}' (HasExport={(export != null)}).");
 
                         // NOTE: reconstructing from export so returned instance is independent of the store
-                        return export != null
-                            ? new X509Certificate2(export)
-                            : new X509Certificate2(best);
+                        if (export != null)
+                        {
+                            try
+                            {
+                                X509Certificate2 reconstructed = X509CertificateLoader.LoadCertificate(export);
+                                return reconstructed;
+                            }
+                            catch
+                            {
+                                Debug.WriteLine($"GetCertificateByName: reconstruction from export failed for '{subjectName}', falling back to copy of store certificate.");
+                            }
+                        }
+
+                        // Return a copy of the store-backed certificate so caller does not get the store-owned instance
+                        return new X509Certificate2(best);
                     }
 
                     return null;

@@ -3,6 +3,17 @@
 # ![Logo][Logo] Portfolie
 A high‑performance portfolio application built with C# and WebAssembly, running entirely in the browser.
 
+## Table of Contents
+- [Features](#features)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Clone the Repository](#clone-the-repository)
+  - [Run the Application](#run-the-application)
+  - [Add Database Migrations](#add-database-migrations)
+- [Configuration](#configuration)
+- [Using the Portfolio](#using-the-portfolio)
+- [Roadmap / Future Ideas](#roadmap--future-ideas)
+
 The project is primarily aimed at software engineers who want to showcase their work to potential employers, but it is flexible enough to be adapted for other professions as well (designers, data specialists, etc.).
 The application supports certificate-based login out of the box and is designed so that additional authentication methods can be added in the future if requested.
 
@@ -14,6 +25,7 @@ The application supports certificate-based login out of the box and is designed 
 
 Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
+- [Docker](https://www.docker.com/get-started) (optional, but recommended for easier setup)
 
 ### Clone the Repository
 
@@ -28,28 +40,27 @@ Prerequisites
    dotnet build
    ```
 
-3. Run with Docker (recommended)
+### Run the Application
+
+1. Run with Docker (recommended)
 
    If the repository contains a `docker-compose.yml` at the repository root you can build and run all services with:
    ```bash
    docker compose up --build
    ```
 
-   If there is no `docker-compose.yml`, build and run the Portfolio project image directly (adjust the path if your Dockerfile is located elsewhere):
-   ```bash
-   docker build -t tirsvadweb.portfolio ./src/Portfolio/Portfolio
-   docker run --rm -p 5000:80 -e ASPNETCORE_ENVIRONMENT=Production tirsvadweb.portfolio
-   ```
-
    Notes:
    - Adjust ports and environment variables to match your configuration.
    - If you prefer to run locally without Docker, continue with the `dotnet run` instructions below.
 
-4. Apply any pending database migrations:
+### Alternatively, run locally without Docker
+
+1. Apply any pending database migrations:
    ```bash
    dotnet ef database update --project src/Portfolio.Infrastructure --startup-project src/Portfolio/Portfolio --context ApplicationDbContext
    ``` 
-5. Run the application (when not using Docker):
+
+2. Run the application (when not using Docker):
    ```bash
    dotnet run --project src/Portfolio/Portfolio
    ```

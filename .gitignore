@@ -418,3 +418,6 @@ FodyWeavers.xsd
 *.msp
 *.db-shm
 *.db-wal
+/docs/doxygen
+/src/Portfolio/Portfolio/portfolio_development.db
+/keys
