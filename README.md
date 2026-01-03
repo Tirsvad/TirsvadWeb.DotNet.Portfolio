@@ -11,6 +11,8 @@ A high‑performance portfolio application built with C# and WebAssembly, runnin
 - [Configuration](#configuration)
 - [Using the Portfolio](#using-the-portfolio)
 - [Roadmap / Future Ideas](#roadmap--future-ideas)
+- [Test & Code Coverage](#test--code-coverage)
+- [API & Code Documentation](#-api--code-documentation)
 
 The project is primarily aimed at software engineers who want to showcase their work to potential employers, but it is flexible enough to be adapted for other professions as well (designers, data specialists, etc.).
 The application supports certificate-based login out of the box and is designed so that additional authentication methods can be added in the future if requested.
@@ -157,6 +159,87 @@ For the concrete configuration values used in this repository, open the two apps
 
 ---
 
+### Database Configuration
+
+You can configure the database connection for Release, Development, and Test environments using one of the following methods:
+
+#### 1. appsettings.json / appsettings.{Environment}.json
+Edit the appropriate file (e.g., `appsettings.Development.json`) and set the connection string:
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=YOUR_SERVER;Initial Catalog=YOUR_DB;User ID=YOUR_USER;Password=YOUR_PASSWORD;MultipleActiveResultSets=True;TrustServerCertificate=True;Encrypt=False"
+  }
+}
+```
+Available variables for the connection string:
+- Data Source
+- Initial Catalog
+- User ID
+- Password
+- MultipleActiveResultSets
+- TrustServerCertificate
+- Encrypt
+
+#### 2. secrets.json (User Secrets, recommended for local development)
+Set the connection string for a specific environment using the .NET user-secrets tool:
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Data Source=YOUR_SERVER;Initial Catalog=YOUR_DB;User ID=YOUR_USER;Password=YOUR_PASSWORD;MultipleActiveResultSets=True;TrustServerCertificate=True;Encrypt=False"
+```
+This is stored in `secrets.json` and is not committed to source control.
+
+#### 3. Environment Variables (Recommended for CI/CD and container setups)
+You can override any part of the connection string using environment variables with the prefix `DOTNET_PORTFOLIO_` (all uppercase) and double underscores for nesting. Only set the variables you want to override; others will be read from config files or secrets.
+
+For example, to override just the password and server for Development:
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__PASSWORD`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__DATASOURCE`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__INITIALCATALOG`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__USERID`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__PASSWORD`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__MULTIPLEACTIVERESULTSETS`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__TRUSTSERVER`
+- `DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__ENCRYPT`
+
+Example (PowerShell):
+```powershell
+$Env:DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__PASSWORD = "NEW_PASSWORD"
+$Env:DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__DATASOURCE = "NEW_SERVER"
+dotnet run --project src/Portfolio/Portfolio
+```
+
+Example (Bash):
+```bash
+export DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__PASSWORD="NEW_PASSWORD"
+export DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__DATASOURCE="NEW_SERVER"
+dotnet run --project src/Portfolio/Portfolio
+```
+
+#### Using Environment Variables in Docker Compose
+
+To override database connection settings in Docker Compose, add environment variables to the `environment:` section of your service. Use all uppercase names and double underscores for nesting. You only need to set the variables you want to override.
+
+Example:
+```yaml
+services:
+  portfolio:
+    # ... other settings ...
+    environment:
+      - DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__DATASOURCE=NEW_SERVER
+      - DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__USERID=NEW_USER
+      - DOTNET_PORTFOLIO_CONNECTIONSTRINGS__DEFAULTCONNECTION__PASSWORD=NEW_PASSWORD
+      # Add other overrides as needed
+```
+
+This will override the specified parts of the connection string for the container. Other values will be read from config files or secrets.
+
+**Precedence:**
+1. Environment variables (with prefix, per part; only those set are overridden)
+2. User secrets (in Development)
+3. appsettings files
+
+> **Note:** Never commit sensitive connection strings or secrets to source control. Use user-secrets or environment variables for local and CI/CD setups.
+
 ## 🧑‍💼 Using the Portfolio
 Once running, you can:
 - Log in with your certificate
@@ -198,7 +281,37 @@ Once running, you can:
   - [ ] Comprehensive testing (unit, integration, e2e)
   - [ ] Documentation and user guides
   - [ ] Custom themes (light/dark)
- 
+
+---
+
+## 🧪 Test & Code Coverage
+
+Automated tests are included. Code coverage is measured as part of the CI/CD pipeline.
+
+- View the latest code coverage report: [Code covergae][CodeCoverageResults-url]
+
+Coverage reports are generated in HTML format and published to the link above.
+
+---
+
+## 📚 API & Code Documentation
+
+Doxygen is used to generate API and code documentation for this project.
+
+### Generate Doxygen Documentation
+
+1. Install [Doxygen](https://www.doxygen.nl/download.html) if you don't have it.
+2. From the repository root, run:
+   ```bash
+   doxygen
+   ```
+   This will generate documentation in `docs/doxygen/html`.
+3. Open `docs/doxygen/html/index.html` in your browser to view the documentation.
+
+- View the latest online Doxygen documentation: [Doxygen Documentation][doxygen-url]
+
+---
+
 <!-- LINK REFERENCES -->
 [contributors-shield]: https://img.shields.io/github/contributors/TirsvadWeb/DotNet.Portfolio?style=for-the-badge
 [contributors-url]: https://github.com/TirsvadWeb/DotNet.Portfolio/graphs/contributors
@@ -216,8 +329,11 @@ Once running, you can:
 
 [downloads-shield]: https://img.shields.io/github/downloads/TirsvadWeb/DotNet.Portfolio/total?style=for-the-badge
 [downloads-url]: https://github.com/TirsvadWeb/DotNet.Portfolio/releases
-Exact steps may vary with your OS and hosting environment. If you want, I can add a `scripts/` folder with PowerShell/mkcert helper scripts for this repository.
 
 <!-- Github Links -->
 [githubIssue-url]: https://github.com/TirsvadWeb/DotNet.Portfolio/issues/
 [githubProjectTasks-url]: https://github.com/orgs/TirsvadWeb/projects/7
+
+<!-- Project Links -->
+[CodeCoverageResults-url]: https://dev.tirsvad.dk/projects/TirsvadWeb/DotNet.Portfolio/codecoverage/ "Code Coverage Results"
+[doxygen-url]: https://dev.tirsvad.dk/projects/TirsvadWeb/DotNet.Portfolio/doxygen/ "doxygen"

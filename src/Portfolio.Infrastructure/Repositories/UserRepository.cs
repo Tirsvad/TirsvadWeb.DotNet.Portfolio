@@ -1,6 +1,6 @@
 using Portfolio.Core.Abstracts.Repositories;
 using Portfolio.Domain.Entities;
-using Portfolio.Infrastructure.Persistents;
+using Portfolio.Infrastructure.Persistences;
 
 namespace Portfolio.Infrastructure.Repositories;
 

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 using Portfolio.Core.Abstracts;
 using Portfolio.Domain.Entities;
-using Portfolio.Infrastructure.Persistents;
+using Portfolio.Infrastructure.Persistences;
 
 namespace Portfolio.Infrastructure.Repositories;
 
@@ -45,7 +45,6 @@ public class ClientCertificateRepository(ApplicationDbContext db) : RepositoryBa
     public async Task<ClientCertificate?> FindBySubjectAsync(string subject)
     {
         // Validate input early to avoid unnecessary database calls.
-        if (string.IsNullOrWhiteSpace(subject)) return null;
-        return await _db.ClientCertificates.FirstOrDefaultAsync(c => c.Subject == subject);
+        return string.IsNullOrWhiteSpace(subject) ? null : await _db.ClientCertificates.FirstOrDefaultAsync(c => c.Subject == subject);
     }
 }

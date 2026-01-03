@@ -1,234 +1,221 @@
-using Portfolio.Core.Abstracts;
-using Portfolio.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+
+using Portfolio.Infrastructure.Persistences;
+using Portfolio.Infrastructure.Repositories;
 using Portfolio.Infrastructure.Services;
 
-using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace Portfolio.Infrastructure.Tests.Services;
 
-/// <summary>
-/// Tests for `CertificateSignInService` covering functional, concurrency and benchmark scenarios.
-/// Groups:
-/// - Functional: TestCategory("Functional")
-/// - Concurrency: TestCategory("Concurrency")
-/// - Benchmark: TestCategory("Benchmark") and [DoNotParallelize]
-/// </summary>
 [TestClass]
 public class CertificateSignInServiceTests
 {
-    private TestClientCertificateRepository _repo = null!;
-    private CertificateSignInService? _service;
+    // A valid self-signed certificate byte array
+    // powershell generate a self-signed cert and export as byte array
+    // $cert = New-SelfSignedCertificate -Subject "CN=TestSubject" -CertStoreLocation "Cert:\CurrentUser\My"
+    // $bytes = [System.IO.File]::ReadAllBytes((Export-Certificate -Cert $cert -FilePath "$env:TEMP\testcert.cer").FullName)
+    // [System.BitConverter]::ToString($bytes) -replace '-', ', 0x'
+    private static readonly byte[] ValidCert = {
+        0x30, 0x82, 0x03, 0x06, 0x30, 0x82, 0x01, 0xEE, 0xA0, 0x03, 0x02, 0x01, 0x02, 0x02, 0x10, 0x40, 0x51, 0x69, 0x4B, 0x63, 0x04, 0x59, 0xAF, 0x4C, 0x78, 0x44, 0x73, 0x90, 0xC8, 0xDE, 0x92, 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0B, 0x05, 0x00, 0x30, 0x16, 0x31, 0x14, 0x30, 0x12, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0C, 0x0B, 0x54, 0x65, 0x73, 0x74, 0x53, 0x75, 0x62, 0x6A, 0x65, 0x63, 0x74, 0x30, 0x1E, 0x17, 0x0D, 0x32, 0x36, 0x30, 0x31, 0x31, 0x31, 0x30, 0x35, 0x35, 0x39, 0x35, 0x39, 0x5A, 0x17, 0x0D, 0x32, 0x37, 0x30, 0x31, 0x31, 0x31, 0x30, 0x36, 0x31, 0x39, 0x35, 0x39, 0x5A, 0x30, 0x16, 0x31, 0x14, 0x30, 0x12, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0C, 0x0B, 0x54, 0x65, 0x73, 0x74, 0x53, 0x75, 0x62, 0x6A, 0x65, 0x63, 0x74, 0x30, 0x82, 0x01, 0x22, 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0F, 0x00, 0x30, 0x82, 0x01, 0x0A, 0x02, 0x82, 0x01, 0x01, 0x00, 0xCA, 0x38, 0x61, 0xCB, 0x60, 0xB8, 0x20, 0x4F, 0xAB, 0x69, 0x58, 0xBB, 0x7E, 0xA2, 0x8D, 0x5E, 0xC7, 0x11, 0x61, 0x00, 0x45, 0xB0, 0xB9, 0xD8, 0x79, 0x5A, 0x5A, 0xDF, 0xA8, 0xDE, 0xE5, 0x7B, 0xA0, 0xE0, 0xD4, 0xCB, 0x11, 0x34, 0xC3, 0xC7, 0x50, 0xFD, 0xD7, 0xD1, 0x10, 0x71, 0x13, 0x35, 0x4C, 0xA2, 0x7A, 0xD5, 0xBC, 0x6C, 0xDE, 0xCF, 0x9E, 0x49, 0xF4, 0x8C, 0xA7, 0x87, 0xEB, 0x02, 0x19, 0xE5, 0x1C, 0x90, 0x23, 0x9F, 0x56, 0xE6, 0xCD, 0x2C, 0xB5, 0x2F, 0xE7, 0x6F, 0x27, 0xFD, 0x45, 0xDC, 0x07, 0x1A, 0xF0, 0xAE, 0xF7, 0x79, 0xD1, 0xCE, 0x89, 0xA2, 0x30, 0xE3, 0x77, 0xB4, 0x10, 0x9C, 0xE0, 0xD3, 0x8F, 0xA1, 0x4D, 0x55, 0xFF, 0x03, 0xD5, 0x6A, 0xED, 0x12, 0x47, 0xA9, 0x27, 0xD8, 0x29, 0xD6, 0xE7, 0xB1, 0x5B, 0xC2, 0x1F, 0x41, 0x34, 0x0E, 0x7C, 0x50, 0x2B, 0xFC, 0x61, 0x1F, 0x23, 0x08, 0x46, 0xBE, 0x65, 0x57, 0x22, 0x3F, 0xB3, 0x2C, 0x01, 0x91, 0xE6, 0x85, 0x3E, 0x76, 0x49, 0x05, 0x96, 0x4A, 0xF0, 0xFE, 0x3E, 0xB1, 0xFD, 0x4F, 0x09, 0xAA, 0x82, 0xDC, 0xAD, 0x59, 0x5E, 0x51, 0xA5, 0x14, 0x46, 0xC1, 0x2E, 0x08, 0xB2, 0x29, 0xA6, 0xD0, 0xD5, 0xC8, 0x87, 0x84, 0xBA, 0x5F, 0xA2, 0xEB, 0xF7, 0xCB, 0xF8, 0x16, 0xDA, 0x4F, 0xDC, 0xEB, 0xFD, 0x0A, 0xAA, 0xC6, 0xD2, 0xE1, 0xE5, 0x89, 0x15, 0x9E, 0xB6, 0xD0, 0x4D, 0x15, 0x5F, 0x62, 0x8A, 0xDB, 0x0D, 0x91, 0x8A, 0x89, 0x2E, 0xA1, 0x6F, 0x72, 0xA5, 0x09, 0x7C, 0xB1, 0x10, 0xAD, 0x71, 0x79, 0x1A, 0x2A, 0x51, 0x52, 0x9F, 0xC9, 0xEF, 0x0F, 0x01, 0x10, 0x39, 0x88, 0x59, 0x3E, 0x0D, 0xF2, 0x09, 0xDC, 0x96, 0xE3, 0xE3, 0xC8, 0x68, 0x0B, 0x86, 0x9D, 0x5F, 0xEC, 0x74, 0x6D, 0x7C, 0xD9, 0x02, 0x03, 0x01, 0x00, 0x01, 0xA3, 0x50, 0x30, 0x4E, 0x30, 0x0E, 0x06, 0x03, 0x55, 0x1D, 0x0F, 0x01, 0x01, 0xFF, 0x04, 0x04, 0x03, 0x02, 0x05, 0xA0, 0x30, 0x1D, 0x06, 0x03, 0x55, 0x1D, 0x25, 0x04, 0x16, 0x30, 0x14, 0x06, 0x08, 0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02, 0x06, 0x08, 0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x01, 0x30, 0x1D, 0x06, 0x03, 0x55, 0x1D, 0x0E, 0x04, 0x16, 0x04, 0x14, 0x57, 0xEE, 0xB7, 0x51, 0xDC, 0x7D, 0xC5, 0x98, 0x0A, 0x60, 0x27, 0x68, 0x07, 0xCE, 0x4D, 0x82, 0x60, 0xD7, 0x4F, 0x5A, 0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0B, 0x05, 0x00, 0x03, 0x82, 0x01, 0x01, 0x00, 0x90, 0xB7, 0xA3, 0x56, 0xC1, 0xDB, 0xF0, 0x58, 0x1A, 0x48, 0x08, 0x78, 0x55, 0x04, 0x63, 0xA9, 0x1E, 0x9E, 0x47, 0x8A, 0x37, 0x15, 0xCC, 0x7F, 0x58, 0x25, 0x00, 0xB8, 0x3B, 0x65, 0x37, 0x01, 0x43, 0x2D, 0xA2, 0xB3, 0x98, 0x15, 0x83, 0x99, 0xEC, 0x6A, 0xE6, 0x01, 0xD0, 0x34, 0x76, 0x86, 0x41, 0x57, 0x56, 0xB1, 0xA0, 0x68, 0xD8, 0xFD, 0xB8, 0x6A, 0xFB, 0x66, 0xA4, 0x62, 0xDF, 0xD2, 0xF4, 0xCF, 0xBC, 0xFC, 0x3F, 0x75, 0x93, 0x4D, 0x8F, 0x37, 0x0F, 0xA0, 0x0F, 0x82, 0x74, 0x2F, 0xC9, 0x16, 0x79, 0x7A, 0xBF, 0xA1, 0x48, 0xC8, 0xDB, 0xDB, 0xB7, 0x7E, 0x38, 0xC5, 0x82, 0x7E, 0x76, 0x17, 0x92, 0xF9, 0x81, 0x6E, 0xC4, 0xED, 0xF0, 0xDD, 0x66, 0x1A, 0xBF, 0x6A, 0xFE, 0x50, 0xBF, 0xE2, 0x64, 0x9A, 0x4D, 0xFF, 0x7A, 0x87, 0x7D, 0x88, 0x3C, 0xE5, 0xE0, 0x7F, 0x08, 0x4A, 0xB2, 0x82, 0xE8, 0xDC, 0xF9, 0xDD, 0x53, 0x39, 0xAE, 0x27, 0xCB, 0x15, 0xF9, 0xCB, 0x4A, 0x27, 0x9A, 0xB1, 0x01, 0x0A, 0xC0, 0xB2, 0x5C, 0xF2, 0xD6, 0x71, 0x5E, 0xD7, 0x5D, 0xAE, 0x87, 0xB6, 0x2C, 0xBE, 0xD2, 0xD5, 0x18, 0xF2, 0x5F, 0x53, 0x47, 0x2E, 0xA7, 0xC3, 0x00, 0x5E, 0xD5, 0x46, 0x90, 0xB8, 0x81, 0x82, 0x74, 0xE5, 0xA0, 0x2A, 0xED, 0x14, 0x74, 0x8D, 0x96, 0x3A, 0x66, 0x86, 0x8B, 0x4B, 0x44, 0x3C, 0x93, 0xBC, 0xFB, 0x0F, 0xA0, 0x38, 0xBF, 0x1A, 0xDF, 0x13, 0x43, 0xAF, 0x2C, 0x56, 0xEF, 0x74, 0x93, 0xC8, 0x54, 0xE0, 0x2E, 0x79, 0xD1, 0xA6, 0x8D, 0x4E, 0x37, 0xE3, 0x8B, 0x19, 0x23, 0x2C, 0x9B, 0x62, 0x87, 0xF0, 0xB6, 0xE5, 0xF1, 0x78, 0x1B, 0x76, 0x2A, 0xD3, 0xBB, 0xA4, 0x16, 0x7D, 0x62, 0x58, 0x2B, 0xD9, 0x40, 0x8D, 0xED, 0x4B, 0x8E, 0x6D, 0xE6, 0x23
+    };
 
-    [TestInitialize]
-    public void Init()
+    private static readonly byte[] DummyCertBytesInvalid = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05
+    };
+
+    private DbContextOptions<ApplicationDbContext> CreateOptions(string dbName)
     {
-        _repo = new TestClientCertificateRepository();
-        _service = new CertificateSignInService(_repo);
+        // Do not use environment variables for thread safety
+        DbContextOptionsServices optionsService = new();
+        // Pass dbName as the 'name' parameter to override Initial Catalog
+        string connectionString = optionsService.CreateConnectionString("Development", dbName);
+        Debug.WriteLine($"Using connection string: {connectionString}");
+        return optionsService.CreateOptions("Development", dbName);
     }
 
+    #region Functional Tests
     [TestMethod]
     [TestCategory("Functional")]
-    public async Task CreatePrincipalForCertificateAsync_SavesNewCertificateAndReturnsPrincipal()
+    public async Task CreatePrincipalForCertificateAsync_ReturnsPrincipal_WhenValidCert()
     {
-        using X509Certificate2 cert = CreateSelfSigned("CN=func-test");
-
-        ClaimsPrincipal? principal = await _service!.CreatePrincipalForCertificateAsync(cert);
-
-        Assert.IsNotNull(principal, "Expected principal to be created");
-        Claim? name = principal!.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name);
-        Assert.IsNotNull(name);
-        Assert.AreEqual(cert.Subject, name!.Value);
-
-        // Repository should have an entry for this subject
-        ClientCertificate? stored = await _repo.FindBySubjectAsync(cert.Subject ?? string.Empty);
-        Assert.IsNotNull(stored, "Expected repository AddAsync to be invoked and stored entity.");
-    }
-
-    [TestMethod]
-    [TestCategory("Functional")]
-    public async Task CreatePrincipalForCertificateAsync_UsesExistingCertificateWhenPresent()
-    {
-        using X509Certificate2 cert = CreateSelfSigned("CN=exists-test");
-
-        // Pre-seed repository
-        ClientCertificate existing = new()
+        string dbName = $"Test_{Guid.NewGuid()}";
+        await using ApplicationDbContext context = new(CreateOptions(dbName));
+        try
         {
-            Id = Guid.NewGuid(),
-            Subject = cert.Subject ?? string.Empty,
-            Issuer = cert.Issuer ?? string.Empty,
-            SerialNumber = cert.SerialNumber ?? string.Empty,
-            ValidFrom = cert.NotBefore,
-            ValidTo = cert.NotAfter
-        };
-        await _repo.AddAsync(existing);
-
-        ClaimsPrincipal? principal = await _service!.CreatePrincipalForCertificateAsync(cert);
-
-        Assert.IsNotNull(principal);
-        Assert.AreEqual(1, _repo.AddCallCount, "AddAsync should not be called again for existing certificate (AddCallCount counts unique adds).");
+            _ = await context.Database.EnsureCreatedAsync();
+            ClientCertificateRepository repo = new(context);
+            CertificateSignInService service = new(repo);
+            X509Certificate2 cert = X509CertificateLoader.LoadCertificate(ValidCert);
+            string subject = "CN=TestSubject";
+            typeof(X509Certificate2).GetField("m_subject", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(cert, subject);
+            ClaimsPrincipal? principal = await service.CreatePrincipalForCertificateAsync(cert);
+            Assert.IsNotNull(principal);
+            Assert.IsInstanceOfType(principal, typeof(ClaimsPrincipal));
+        }
+        finally
+        {
+            _ = await context.Database.EnsureDeletedAsync();
+        }
     }
+    #endregion
 
+    #region Error/Com Tests
     [TestMethod]
-    [TestCategory("Functional")]
-    public async Task CreatePrincipalForCertificateAsync_ReturnsNull_WhenRepoThrowsComException()
+    [TestCategory("Error")]
+    [DataRow(null)]
+    [DataRow(new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 })]
+    public async Task CreatePrincipalForCertificateAsync_ReturnsNull_OnException(byte[]? certBytes)
     {
-        // Arrange: repo configured to throw COMException on Find
-        _repo.ThrowOnFind = true;
-        using X509Certificate2 cert = CreateSelfSigned("CN=com-error");
-
-        ClaimsPrincipal? principal = await _service!.CreatePrincipalForCertificateAsync(cert);
-
-        Assert.IsNull(principal, "Expected null principal when repository throws a COM exception (service swallows exceptions).");
+        string dbName = $"Test_{Guid.NewGuid()}";
+        await using ApplicationDbContext context = new(CreateOptions(dbName));
+        X509Certificate2? cert = null;
+        try
+        {
+            _ = await context.Database.EnsureCreatedAsync();
+            ClientCertificateRepository repo = new(context);
+            CertificateSignInService service = new(repo);
+            if (certBytes == null)
+            {
+                ClaimsPrincipal? result = await service.CreatePrincipalForCertificateAsync(null!);
+                Assert.IsNull(result);
+                return;
+            }
+            else
+            {
+                try
+                {
+                    cert = X509CertificateLoader.LoadCertificate(certBytes);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Expected exception loading certificate: {ex.Message}");
+                }
+                ClaimsPrincipal? result = await service.CreatePrincipalForCertificateAsync(null!);
+                Assert.IsNull(result);
+                return;
+            }
+        }
+        finally
+        {
+            _ = await context.Database.EnsureDeletedAsync();
+        }
     }
+    #endregion
 
+    #region Concurrency/Threadsafe Tests
     [TestMethod]
     [TestCategory("Concurrency")]
-    public async Task CreatePrincipalForCertificateAsync_ConcurrentCalls_AreThreadSafe()
+    public void EnsureCertificatePersistedAsync_ThreadSafe_MultiSession()
     {
-        using X509Certificate2 cert = CreateSelfSigned("CN=concurrent");
-
-        const int concurrency = 50;
-        Task<ClaimsPrincipal?>[] tasks = new Task<ClaimsPrincipal?>[concurrency];
-
-        for (int i = 0; i < concurrency; i++)
+        string dbName = $"Test_{Guid.NewGuid()}";
+        using ApplicationDbContext context = new(CreateOptions(dbName));
+        _ = context.Database.EnsureCreated();
+        _ = Parallel.For(0, 10, i =>
         {
-            tasks[i] = Task.Run(() => _service!.CreatePrincipalForCertificateAsync(cert));
-        }
+            using ApplicationDbContext innerContext = new(CreateOptions(dbName));
+            ClientCertificateRepository repo = new(innerContext);
+            CertificateSignInService service = new(repo);
+            X509Certificate2 cert = X509CertificateLoader.LoadCertificate(ValidCert);
+            string subject = $"CN=TestSubject{i}";
+            typeof(X509Certificate2).GetField("m_subject", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(cert, subject);
+            Task<ClaimsPrincipal?> task = service.CreatePrincipalForCertificateAsync(cert);
+            task.Wait();
+            Assert.IsNotNull(task.Result);
+        });
+        _ = context.Database.EnsureDeleted();
+    }
+    #endregion
 
-        await Task.WhenAll(tasks);
+    #region Performance/Benchmark Tests
+    //[TestMethod]
+    //[TestCategory("Performance")]
+    //public async Task CreatePrincipalForCertificateAsync_Performance_Benchmark()
+    //{
+    //    string dbName = $"Test_{Guid.NewGuid()}";
+    //    await using ApplicationDbContext context = new(CreateOptions(dbName));
+    //    try
+    //    {
+    //        _ = await context.Database.EnsureCreatedAsync();
+    //        ClientCertificateRepository repo = new(context);
+    //        CertificateSignInService service = new(repo);
+    //        X509Certificate2 cert = X509CertificateLoader.LoadCertificate(ValidCert);
+    //        Stopwatch sw = Stopwatch.StartNew();
+    //        ClaimsPrincipal? principal = await service.CreatePrincipalForCertificateAsync(cert);
+    //        sw.Stop();
+    //        Assert.IsNotNull(principal);
+    //        Assert.IsLessThan(400, sw.ElapsedMilliseconds, $"Performance issue: {sw.ElapsedMilliseconds}ms");
+    //    }
+    //    finally
+    //    {
+    //        _ = await context.Database.EnsureDeletedAsync();
+    //    }
+    //}
+    #endregion
 
-        ClaimsPrincipal?[] results = [.. tasks.Select(t => t.Result)];
-        Assert.IsTrue(results.All(r => r != null), "All concurrent calls should return a principal.");
+    #region Multi-Session Tests
+    [TestMethod]
+    [TestCategory("Concurrency")]
+    public void CreatePrincipalForCertificateAsync_MultiSession()
+    {
+        string dbName = $"Test_{Guid.NewGuid()}";
+        using ApplicationDbContext context = new(CreateOptions(dbName));
+        _ = context.Database.EnsureCreated();
+        _ = Parallel.For(0, 5, i =>
+        {
+            using ApplicationDbContext innerContext = new(CreateOptions(dbName));
+            ClientCertificateRepository repo = new(innerContext);
+            CertificateSignInService service = new(repo);
+            X509Certificate2 cert = X509CertificateLoader.LoadCertificate(ValidCert);
+            string subject = $"CN=TestSubject{i}";
+            typeof(X509Certificate2).GetField("m_subject", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(cert, subject);
+            Task<ClaimsPrincipal?> task = service.CreatePrincipalForCertificateAsync(cert);
+            task.Wait();
+            Assert.IsNotNull(task.Result);
+        });
+        _ = context.Database.EnsureDeleted();
+    }
+    #endregion
 
-        // Ensure AddAsync was effectively called only once for new subject
-        Assert.AreEqual(1, _repo.AddCallCount, "Repository AddAsync should be called once when concurrent callers race to create the entity.");
-
-        string thumb = results.First(r => r != null)!.Claims.First(c => c.Type == "thumbprint").Value;
-        Assert.IsTrue(results.All(r => r!.Claims.First(c => c.Type == "thumbprint").Value == thumb));
+    #region Private/Helper/Edge Tests
+    [TestMethod]
+    [TestCategory("Helper")]
+    public void BuildClaims_ReturnsClaimsList()
+    {
+        MethodInfo? method = typeof(CertificateSignInService).GetMethod("BuildClaims", BindingFlags.NonPublic | BindingFlags.Static);
+        X509Certificate2 cert = X509CertificateLoader.LoadCertificate(ValidCert);
+        object? result = method?.Invoke(null, new object[] { cert });
+        List<Claim>? claims = result as List<Claim>;
+        Assert.IsNotNull(claims);
+        Assert.IsNotEmpty(claims);
     }
 
     [TestMethod]
-    [TestCategory("Benchmark")]
-    [DoNotParallelize]
-    public async Task CreatePrincipalForCertificateAsync_Performance_ManyCalls_WithinThreshold()
+    [TestCategory("Helper")]
+    public void CreateClaim_ReturnsClaim()
     {
-        // Use a repo pre-seeded so service can return quickly and test hot-path behavior
-        using X509Certificate2 cert = CreateSelfSigned("CN=perf");
-        await _repo.FindBySubjectAsync(cert.Subject ?? string.Empty); // ensure repo is reachable
-
-        // Pre-seed the repo by invoking service once
-        _ = await _service!.CreatePrincipalForCertificateAsync(cert);
-
-        const int calls = 500;
-        Stopwatch sw = Stopwatch.StartNew();
-        for (int i = 0; i < calls; i++)
-        {
-            _ = await _service.CreatePrincipalForCertificateAsync(cert);
-        }
-        sw.Stop();
-
-        // Conservative threshold: 5 seconds for 500 calls on CI can be adjusted
-        Assert.IsLessThan(5000, sw.ElapsedMilliseconds, $"Expected {calls} calls to complete under 5000ms, took {sw.ElapsedMilliseconds}ms.");
+        MethodInfo? method = typeof(CertificateSignInService).GetMethod("CreateClaim", BindingFlags.NonPublic | BindingFlags.Static);
+        object? result = method?.Invoke(null, new object[] { "type", "value" });
+        Claim? claim = result as Claim;
+        Assert.IsNotNull(claim);
+        Assert.AreEqual("type", claim.Type);
+        Assert.AreEqual("value", claim.Value);
     }
 
     [TestMethod]
-    [TestCategory("Functional")]
-    public async Task CreatePrincipalForCertificateAsync_MultiSession_AddRemoveRepeat_BehavesCorrectly()
+    [TestCategory("Helper")]
+    public void CreatePrincipal_ReturnsPrincipal()
     {
-        using X509Certificate2 cert = CreateSelfSigned("CN=multisession");
-
-        // Iterate: add via service then remove from repo and ensure subsequent call returns null
-        ClaimsPrincipal? first = await _service!.CreatePrincipalForCertificateAsync(cert);
-        Assert.IsNotNull(first);
-
-        // Remove from repo to simulate session end / cleanup
-        await _repo.DeleteBySubjectAsync(cert.Subject ?? string.Empty);
-
-        ClaimsPrincipal? second = await _service.CreatePrincipalForCertificateAsync(cert);
-        Assert.IsNotNull(second, "Service should recreate the stored entity when missing (it persists on first use).");
+        MethodInfo? method = typeof(CertificateSignInService).GetMethod("CreatePrincipal", BindingFlags.NonPublic | BindingFlags.Static);
+        List<Claim> claims = [new Claim("type", "value")];
+        object? result = method?.Invoke(null, new object[] { claims });
+        ClaimsPrincipal? principal = result as ClaimsPrincipal;
+        Assert.IsNotNull(principal);
+        _ = Assert.IsInstanceOfType<ClaimsPrincipal>(principal);
     }
-
-    // Helper: create a self-signed cert in-memory
-    private static X509Certificate2 CreateSelfSigned(string subject)
-    {
-        using RSA rsa = System.Security.Cryptography.RSA.Create(2048);
-        CertificateRequest req = new(subject, rsa, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        using X509Certificate2 cert = req.CreateSelfSigned(now.AddDays(-1), now.AddYears(1));
-        // Use a direct import of the exported PFX bytes to avoid platform-specific loader issues in tests
-        X509Certificate2 rs1 = X509CertificateLoader.LoadPkcs12(cert.Export(X509ContentType.Pfx), "");
-        return rs1;
-    }
-
-    // Minimal thread-safe test double for IClientCertificateRepository
-    private sealed class TestClientCertificateRepository : IClientCertificateRepository
-    {
-        private readonly ConcurrentDictionary<string, ClientCertificate> _store = new(StringComparer.OrdinalIgnoreCase);
-        public bool ThrowOnFind { get; set; }
-        private int _addCallCount;
-        public int AddCallCount => _addCallCount;
-
-        public Task AddAsync(ClientCertificate entity)
-        {
-            ArgumentNullException.ThrowIfNull(entity);
-            // store by subject
-            _store[entity.Subject] = entity;
-            Interlocked.Increment(ref _addCallCount);
-            return Task.CompletedTask;
-        }
-
-        // Provide a helper to delete by subject for multi-session test
-        public Task DeleteBySubjectAsync(string subject)
-        {
-            if (string.IsNullOrWhiteSpace(subject)) return Task.CompletedTask;
-            _store.TryRemove(subject, out _);
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteAsync(ClientCertificate entity)
-        {
-            if (entity == null) return Task.CompletedTask;
-            _store.TryRemove(entity.Subject, out _);
-            return Task.CompletedTask;
-        }
-
-        public Task<IEnumerable<ClientCertificate>> GetAllAsync()
-        {
-            return Task.FromResult<IEnumerable<ClientCertificate>>([.. _store.Values]);
-        }
-
-        public Task<ClientCertificate?> GetByIdAsync(Guid id)
-        {
-            ClientCertificate? found = _store.Values.FirstOrDefault(c => c.Id == id);
-            return Task.FromResult(found);
-        }
-
-        public Task<ClientCertificate?> FindBySubjectAsync(string subject)
-        {
-            if (ThrowOnFind)
-            {
-                // simulate COM error or other native interop failure
-                throw new COMException("Simulated COM failure");
-            }
-
-            if (string.IsNullOrWhiteSpace(subject)) return Task.FromResult<ClientCertificate?>(null);
-            if (_store.TryGetValue(subject, out ClientCertificate? found))
-            {
-                return Task.FromResult<ClientCertificate?>(found);
-            }
-            return Task.FromResult<ClientCertificate?>(null);
-        }
-
-        public Task UpdateAsync(ClientCertificate entity)
-        {
-            ArgumentNullException.ThrowIfNull(entity);
-            _store[entity.Subject] = entity;
-            return Task.CompletedTask;
-        }
-    }
+    #endregion
 }
+

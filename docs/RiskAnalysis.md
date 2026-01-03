@@ -19,7 +19,7 @@ Each risk has a unique ID, a rating of likelihood (1-5), severity (1-5), a calcu
 
 | ID    | Description | Likelihood | Severity | Risk Score | Mitigation |
 |-------|-------------|------------|----------|------------|------------|
-| TR001 | User password compromise due to phishing attacks | 3 | 4 | 12 | Implement multi-factor authentication (MFA) and user education programs. |
+| TR-001 | User password compromise due to phishing attacks | 3 | 4 | 12 | Implement multi-factor authentication (MFA) and user education programs. |
 
 ## Operational Risk
 
@@ -27,7 +27,7 @@ Each risk has a unique ID, a rating of likelihood (1-5), severity (1-5), a calcu
 
 | ID    | Description | Likelihood | Severity | Risk Score | Mitigation |
 |-------|-------------|------------|----------|------------|------------|
-| OR001 | Downtime of authentication service impacting user access | 2 | 5 | 10 | Implement redundancy and failover mechanisms. |
+| OR-001 | Downtime of authentication service impacting user access | 2 | 5 | 10 | Implement redundancy and failover mechanisms. |
 
 ### Legal and Compliance Risk
 
@@ -35,7 +35,7 @@ Each risk has a unique ID, a rating of likelihood (1-5), severity (1-5), a calcu
 
 | ID    | Description | Likelihood | Severity | Risk Score | Mitigation |
 |-------|-------------|------------|----------|------------|------------|
-| LCR001 | Non-compliance with data protection regulations | 2 | 4 | 8 | Regular audits and how to documentation for developers. |
+| LCR-001 | Non-compliance with data protection regulations | 2 | 4 | 8 | Regular audits and how to documentation for developers. |
 
 ---
 

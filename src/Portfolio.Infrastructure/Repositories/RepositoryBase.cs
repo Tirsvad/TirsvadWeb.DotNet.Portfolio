@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 using Portfolio.Core.Abstracts.Repositories;
 using Portfolio.Domain.Abstracts;
-using Portfolio.Infrastructure.Persistents;
+using Portfolio.Infrastructure.Persistences;
 
 namespace Portfolio.Infrastructure.Repositories;
 

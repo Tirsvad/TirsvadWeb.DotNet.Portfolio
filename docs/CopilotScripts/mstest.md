@@ -9,6 +9,7 @@ test for com error
 test for threadsafe
 test for performance
 test for multi session
+Test for Private/Edge/Helper
 
 group test benchmark, Concurrency and functional test
 ```

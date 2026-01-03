@@ -52,6 +52,7 @@ namespace Portfolio.Core.Services;
 /// </remarks>
 public class X509CertificateService : IX509CertificateService
 {
+    #region Fields
     // Predefined certificate subject/friendly name
     private const string PredefinedCertName = "TirsvadWebCert";
 
@@ -69,8 +70,9 @@ public class X509CertificateService : IX509CertificateService
 
     // Inline: guard dictionary used to prevent duplicate concurrent validations per subject.
     private readonly ConcurrentDictionary<string, byte> _validationRunning = new(StringComparer.OrdinalIgnoreCase);
+    #endregion
 
-
+    #region Methods
     /// <inheritdoc/>
     public Task<X509Certificate2?> GetPreloadedCertificateAsync(string? predefinedCertName = null)
     {
@@ -85,175 +87,14 @@ public class X509CertificateService : IX509CertificateService
             return null;
         }
 
-        // Check cache first
-        if (_cache.TryGetValue(subjectName, out CertificateCacheEntry? cached))
+        var cacheResult = await TryGetFromCacheAsync(subjectName);
+        if (cacheResult.found)
         {
-            Debug.WriteLine(string.Format(DEBUG_CACHE_HIT, subjectName, cached == null));
-            if (cached != null)
-            {
-                // If we cached export bytes, validate presence in the store before reconstructing.
-                if (cached.PfxExport != null)
-                {
-                    Debug.WriteLine(string.Format(DEBUG_CACHED_EXPORT_PRESENT, subjectName));
-                    try
-                    {
-                        using X509Store validateStore = new(StoreName.My, StoreLocation.CurrentUser);
-                        validateStore.Open(OpenFlags.ReadOnly);
-                        X509Certificate2Collection found = validateStore.Certificates.Find(X509FindType.FindByThumbprint, cached.Thumbprint, validOnly: false);
-                        Debug.WriteLine(string.Format(DEBUG_VALIDATE_STORE_FIND, found?.Count ?? 0, cached.Thumbprint));
-                        if (found != null && found.Count > 0)
-                        {
-                            try
-                            {
-                                // Reconstruct from PFX export so callers receive an independent instance.
-                                X509Certificate2 rs1 = X509CertificateLoader.LoadCertificate(cached.PfxExport!);
-                                return rs1;
-                            }
-                            catch
-                            {
-                                // If reconstruction fails, remove the cache entry and fall through to fresh lookup
-                                _cache.TryRemove(subjectName, out _);
-                            }
-                        }
-                        else
-                        {
-                            _cache.TryRemove(subjectName, out _);
-                        }
-                    }
-                    catch
-                    {
-                        // If store access fails, remove cache entry to avoid returning stale certs and continue to fresh lookup
-                        _cache.TryRemove(subjectName, out _);
-                    }
-                }
-
-                Debug.WriteLine(string.Format(DEBUG_CACHED_ENTRY_NO_EXPORT, subjectName));
-                try
-                {
-                    using X509Store validateStore = new(StoreName.My, StoreLocation.CurrentUser);
-                    validateStore.Open(OpenFlags.ReadOnly);
-                    X509Certificate2Collection found = validateStore.Certificates.Find(X509FindType.FindByThumbprint, cached.Thumbprint, validOnly: false);
-                    Debug.WriteLine(string.Format(DEBUG_VALIDATE_STORE_FIND, found?.Count ?? 0, cached.Thumbprint));
-                    if (found != null && found.Count > 0)
-                    {
-                        return new X509Certificate2(found[0]);
-                    }
-                    else
-                    {
-                        _cache.TryRemove(subjectName, out _);
-                    }
-                }
-                catch
-                {
-                    // If store access fails and we couldn't reconstruct earlier, remove cache entry and continue.
-                    _cache.TryRemove(subjectName, out _);
-                }
-            }
-            else
-            {
-                _cache.TryRemove(subjectName, out _);
-            }
+            return cacheResult.certificate;
         }
 
-        try
-        {
-            // Offload blocking store operations to a background thread pool thread to avoid blocking callers.
-            return await Task.Run(() =>
-            {
-                using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
-                try
-                {
-                    store.Open(OpenFlags.ReadOnly);
-
-                    // Optimized lookup: use the built-in Find API instead of enumerating every certificate.
-                    X509Certificate2Collection found = store.Certificates.Find(X509FindType.FindBySubjectName, subjectName, validOnly: false);
-                    Debug.WriteLine(string.Format(DEBUG_FRESH_LOOKUP, subjectName, found?.Count ?? 0));
-
-                    List<X509Certificate2> candidates = [];
-
-                    if (found != null && found.Count > 0)
-                    {
-                        candidates.AddRange(found.Cast<X509Certificate2>());
-                    }
-
-                    // Additional friendly name matching for certificates that may not be found by subject name
-                    // (this is typically fast since we only iterate the small result set when Find returned nothing)
-                    if (candidates.Count == 0)
-                    {
-                        foreach (X509Certificate2 c in store.Certificates)
-                        {
-                            if (!string.IsNullOrWhiteSpace(c.FriendlyName) && string.Equals(c.FriendlyName, subjectName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                candidates.Add(c);
-                            }
-                        }
-                    }
-
-                    if (candidates.Count == 0)
-                    {
-                        // Cache miss -> cache negative result to avoid repeated full scans
-                        _cache[subjectName] = null;
-                        Debug.WriteLine(string.Format(DEBUG_NO_CANDIDATES, subjectName));
-                        return null;
-                    }
-
-                    // Prefer certificates with a private key and the most recent expiry date
-                    X509Certificate2? best = candidates
-                        .OrderByDescending(c => c.NotAfter)
-                        .FirstOrDefault(c => c.HasPrivateKey)
-                        ?? candidates.OrderByDescending(c => c.NotAfter).FirstOrDefault();
-
-                    if (best != null)
-                    {
-                        // Attempt to export a PFX payload for quick reconstruction on the hot path.
-                        byte[]? export = null;
-                        try
-                        {
-                            // Export may fail for non-exportable keys; swallow errors and continue without export.
-                            export = best.Export(X509ContentType.Pfx, string.Empty);
-                            Debug.WriteLine(string.Format(DEBUG_EXPORT_SUCCEEDED, subjectName, export?.Length ?? 0));
-                        }
-                        catch { Debug.WriteLine(string.Format(DEBUG_EXPORT_FAILED, subjectName)); }
-
-                        // Cache a small immutable DTO with optional exported bytes.
-                        CertificateCacheEntry entry = new(best.Thumbprint, best.NotAfter, best.HasPrivateKey, export);
-                        _cache[subjectName] = entry;
-                        Debug.WriteLine(string.Format(DEBUG_CACHED_ENTRY_CACHED, subjectName, (export != null)));
-
-                        // NOTE: reconstructing from export so returned instance is independent of the store
-                        if (export != null)
-                        {
-                            try
-                            {
-                                X509Certificate2 reconstructed = X509CertificateLoader.LoadCertificate(export);
-                                return reconstructed;
-                            }
-                            catch
-                            {
-                                Debug.WriteLine(string.Format(DEBUG_RECONSTRUCTION_FAILED, subjectName));
-                            }
-                        }
-
-                        // Return a copy of the store-backed certificate so caller does not get the store-owned instance
-                        return new X509Certificate2(best);
-                    }
-
-                    return null;
-                }
-                finally
-                {
-                    try { store.Close(); } catch { }
-                }
-            });
-        }
-        catch
-        {
-            // Swallow exceptions intentionally: consumers of this service
-            // expect a null result when a certificate cannot be accessed.
-        }
-
-        _cache[subjectName] = null;
-        return null;
+        var freshResult = await FindAndCacheCertificateAsync(subjectName);
+        return freshResult;
     }
 
     public async Task<X509Certificate2?> CreateCertificateAsync(string subjectName)
@@ -281,9 +122,7 @@ public class X509CertificateService : IX509CertificateService
                 try
                 {
                     byte[] pfx = cert.Export(X509ContentType.Pfx, string.Empty);
-                    //certWithKey = new X509Certificate2(pfx, string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
                     certWithKey = X509CertificateLoader.LoadPkcs12(pfx, string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
-
                 }
                 catch
                 {
@@ -302,10 +141,7 @@ public class X509CertificateService : IX509CertificateService
                     writeStore.Add(certWithKey);
                     writeStore.Close();
                 }
-                catch
-                {
-                    // ignore store add errors
-                }
+                catch { } // ignore store write errors
 
                 // Cache and return
                 byte[]? export = null;
@@ -319,11 +155,165 @@ public class X509CertificateService : IX509CertificateService
 
                 return new X509Certificate2(certWithKey);
             }
-            catch
-            {
-                // ignore creation errors and fall through to negative cache
-            }
+            catch { } // ignore creation errors
         }
         return null;
     }
+
+    private bool TryRemoveCache(string subjectName)
+    {
+        _cache.TryRemove(subjectName, out _);
+        return false;
+    }
+
+    private X509Certificate2? GetCertificateFromStoreByThumbprint(string thumbprint)
+    {
+        using X509Store validateStore = new(StoreName.My, StoreLocation.CurrentUser);
+        validateStore.Open(OpenFlags.ReadOnly);
+        X509Certificate2Collection found = validateStore.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false);
+        Debug.WriteLine(string.Format(DEBUG_VALIDATE_STORE_FIND, found?.Count ?? 0, thumbprint));
+        return (found != null && found.Count > 0) ? new X509Certificate2(found[0]) : null;
+    }
+
+    private (bool found, X509Certificate2? certificate) TryGetFromCacheWithExport(string subjectName, CertificateCacheEntry cached)
+    {
+        Debug.WriteLine(string.Format(DEBUG_CACHED_EXPORT_PRESENT, subjectName));
+        try
+        {
+            var cert = GetCertificateFromStoreByThumbprint(cached.Thumbprint);
+            if (cert == null)
+                return (TryRemoveCache(subjectName), null);
+            try
+            {
+                X509Certificate2 rs1 = X509CertificateLoader.LoadCertificate(cached.PfxExport!);
+                return (true, rs1);
+            }
+            catch
+            {
+                return (TryRemoveCache(subjectName), null);
+            }
+        }
+        catch
+        {
+            return (TryRemoveCache(subjectName), null);
+        }
+    }
+
+    private (bool found, X509Certificate2? certificate) TryGetFromCacheWithoutExport(string subjectName, CertificateCacheEntry cached)
+    {
+        Debug.WriteLine(string.Format(DEBUG_CACHED_ENTRY_NO_EXPORT, subjectName));
+        try
+        {
+            var cert = GetCertificateFromStoreByThumbprint(cached.Thumbprint);
+            if (cert != null)
+                return (true, cert);
+            return (TryRemoveCache(subjectName), null);
+        }
+        catch
+        {
+            return (TryRemoveCache(subjectName), null);
+        }
+    }
+
+    private async Task<(bool found, X509Certificate2? certificate)> TryGetFromCacheAsync(string subjectName)
+    {
+        if (!_cache.TryGetValue(subjectName, out CertificateCacheEntry? cached))
+            return (false, null);
+        Debug.WriteLine(string.Format(DEBUG_CACHE_HIT, subjectName, cached == null));
+        if (cached == null)
+            return (false, null);
+        if (cached.PfxExport != null)
+            return TryGetFromCacheWithExport(subjectName, cached);
+        return TryGetFromCacheWithoutExport(subjectName, cached);
+    }
+
+    private List<X509Certificate2> FindCandidates(X509Store store, string subjectName)
+    {
+        X509Certificate2Collection found = store.Certificates.Find(X509FindType.FindBySubjectName, subjectName, validOnly: false);
+        Debug.WriteLine(string.Format(DEBUG_FRESH_LOOKUP, subjectName, found?.Count ?? 0));
+        List<X509Certificate2> candidates = [];
+        if (found != null && found.Count > 0)
+        {
+            candidates.AddRange(found.Cast<X509Certificate2>());
+        }
+        if (candidates.Count == 0)
+        {
+            foreach (X509Certificate2 c in store.Certificates)
+            {
+                if (!string.IsNullOrWhiteSpace(c.FriendlyName) && string.Equals(c.FriendlyName, subjectName, StringComparison.OrdinalIgnoreCase))
+                {
+                    candidates.Add(c);
+                }
+            }
+        }
+        return candidates;
+    }
+
+    private X509Certificate2? GetBestCandidate(List<X509Certificate2> candidates)
+    {
+        return candidates
+            .OrderByDescending(c => c.NotAfter)
+            .FirstOrDefault(c => c.HasPrivateKey)
+            ?? candidates.OrderByDescending(c => c.NotAfter).FirstOrDefault();
+    }
+
+    private async Task<X509Certificate2?> FindAndCacheCertificateAsync(string subjectName)
+    {
+        try
+        {
+            return await Task.Run(() =>
+            {
+                using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
+                try
+                {
+                    store.Open(OpenFlags.ReadOnly);
+                    var candidates = FindCandidates(store, subjectName);
+                    if (candidates.Count == 0)
+                    {
+                        _cache[subjectName] = null;
+                        Debug.WriteLine(string.Format(DEBUG_NO_CANDIDATES, subjectName));
+                        return null;
+                    }
+                    var best = GetBestCandidate(candidates);
+                    if (best == null)
+                    {
+                        _cache[subjectName] = null;
+                        return null;
+                    }
+                    byte[]? export = null;
+                    try
+                    {
+                        export = best.Export(X509ContentType.Pfx, string.Empty);
+                        Debug.WriteLine(string.Format(DEBUG_EXPORT_SUCCEEDED, subjectName, export?.Length ?? 0));
+                    }
+                    catch { Debug.WriteLine(string.Format(DEBUG_EXPORT_FAILED, subjectName)); }
+                    CertificateCacheEntry entry = new(best.Thumbprint, best.NotAfter, best.HasPrivateKey, export);
+                    _cache[subjectName] = entry;
+                    Debug.WriteLine(string.Format(DEBUG_CACHED_ENTRY_CACHED, subjectName, (export != null)));
+                    if (export != null)
+                    {
+                        try
+                        {
+                            X509Certificate2 reconstructed = X509CertificateLoader.LoadCertificate(export);
+                            return reconstructed;
+                        }
+                        catch
+                        {
+                            Debug.WriteLine(string.Format(DEBUG_RECONSTRUCTION_FAILED, subjectName));
+                        }
+                    }
+                    return new X509Certificate2(best);
+                }
+                finally
+                {
+                    try { store.Close(); } catch { }
+                }
+            });
+        }
+        catch { }
+        _cache[subjectName] = null;
+        return null;
+    }
+
+    #endregion
 }
