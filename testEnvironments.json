@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "environments": [
+    // See https://aka.ms/remotetesting for more details
+    // about how to configure remote environments.
+    //{
+    //  "name": "WSL Ubuntu",
+    //  "type": "wsl",
+    //  "wslDistribution": "Debian"
+    //},
+    {
+      "name": "Docker dotnet/sdk",
+      "type": "docker",
+      "dockerImage": "mcr.microsoft.com/dotnet/sdk",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  ]
+}

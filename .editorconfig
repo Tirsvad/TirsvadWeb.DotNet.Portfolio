@@ -1,4 +1,3 @@
-# Remove the line below if you want to inherit .editorconfig settings from higher directories
 root = true
 
 [*]
@@ -15,7 +14,6 @@ indent_size = 2
 
 [*.{json,slnf}]
 indent_size = 2
-end_of_line = lf
 
 [*.{props,targets}]
 indent_size = 2
@@ -26,7 +24,6 @@ charset = utf-8-bom
 
 [*.{xml,yml}]
 indent_size = 2
-end_of_line = lf
 
 [*.manifest]
 indent_size = 2
@@ -36,19 +33,15 @@ indent_size = 2
 
 [*.{json,css,webmanifest}]
 indent_size = 2
-end_of_line = lf
 
 [web.config]
 indent_size = 2
-end_of_line = lf
 
 [*.sh]
 indent_size = 2
-end_of_line = lf
 
 [*.md]
 indent_size = 2
-end_of_line = lf
 trim_trailing_whitespace = false
 
 # C# files
@@ -62,7 +55,6 @@ indent_style = space
 tab_width = 4
 
 # New line preferences
-end_of_line = crlf
 insert_final_newline = false
 
 #### .NET Code Actions ####

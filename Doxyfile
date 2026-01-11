@@ -61,7 +61,7 @@ PROJECT_BRIEF          =
 # pixels and the maximum width should not exceed 200 pixels. Doxygen will copy
 # the logo to the output directory.
 
-PROJECT_LOGO           = E:/repos/TirsvadWeb.DotNet.Portfolio/images/logo/32x32/logo.png
+PROJECT_LOGO           = E:/repos/TirsvadCLI.Logo/images/logo/64x64/logo.png
 
 # With the PROJECT_ICON tag one can specify an icon that is included in the tabs
 # when the HTML document is shown. Doxygen will copy the logo to the output
