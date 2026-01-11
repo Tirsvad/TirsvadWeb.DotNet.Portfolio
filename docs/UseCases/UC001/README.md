@@ -1,5 +1,5 @@
 # Use Case 1 - Sign in using a client certificate
-A detailed use case document for "Sign in using a client certificate" authentication method in a web application.
+A detailed use case documentation for "Sign in using a client certificate" authentication method in a web application.
 It is intended to provide a comprehensive understanding of the use case, including the domain model, user story, use case brief, system sequence diagram, operations contracts, sequence diagram, domain class diagram (DCD), and entity-relationship (ER) diagram.
 
 ## Table of Contents

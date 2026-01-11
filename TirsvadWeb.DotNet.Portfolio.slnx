@@ -8,6 +8,7 @@
     <File Path="Directory.Build.targets" />
     <File Path="docker-compose.yml" />
     <File Path="Dockerfile" />
+    <File Path="docs/Generate-IdOverview.ps1" />
     <File Path="Doxyfile" />
     <File Path="global.json" />
     <File Path="LICENSE" />
@@ -18,11 +19,30 @@
     <File Path="docker/entrypoint.sh" />
     <File Path="docker/run_tests.sh" />
   </Folder>
-  <Folder Name="/Solution Items/docs/" />
+  <Folder Name="/Solution Items/docs/">
+    <File Path="docs/DCD.md" />
+    <File Path="docs/DomainModel.md" />
+    <File Path="docs/ERD.md" />
+    <File Path="docs/Generate-IdOverview.ps1" />
+    <File Path="docs/IdOverview.md" />
+    <File Path="docs/KPI.md" />
+    <File Path="docs/QualityCriteriaCode.md" />
+    <File Path="docs/README.md" />
+    <File Path="docs/RiskAnalysis.md" />
+    <File Path="docs/scenarios.md" />
+    <File Path="docs/usecases.md" />
+  </Folder>
   <Folder Name="/Solution Items/docs/CopilotScripts/">
     <File Path="docs/CopilotScripts/classBuilder.md" />
     <File Path="docs/CopilotScripts/mstest.md" />
     <File Path="docs/CopilotScripts/xmlDocumentation.md" />
+  </Folder>
+  <Folder Name="/Solution Items/docs/UseCases/" />
+  <Folder Name="/Solution Items/docs/UseCases/UC001/">
+    <File Path="docs/UseCases/UC001/README.md" />
+  </Folder>
+  <Folder Name="/Solution Items/docs/UseCases/UC002/">
+    <File Path="docs/UseCases/UC002/README.md" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Portfolio.Core.Tests/Portfolio.Core.Tests.csproj" />

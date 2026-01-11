@@ -1,10 +1,9 @@
 # DCD
 
 ## Metadata
-| Element     | Description |
-|-------------|-------------|
-| Title       | Data Class Diagram |
-| Cross References | [Domain model][DM]<br/>[Use Cases 001][UC001-DCD]<br/> |
+| **ID** | **Description** | Cross Reference links |
+|--------|-----------------|----------------------|
+| DCD-001 | Data Class Diagram | [Domain model][DM]<br/>[Use Cases 001][UC001-DCD]<br/>  |
 
 ## Diagram
 

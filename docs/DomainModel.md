@@ -2,11 +2,9 @@
 A conceptual representation of the main entities and their relationships within the system for all use cases.
 
 ## Metadata
-| Element     | Description |
-|-------------|-------------|
-| ID          | 000-DM      |
-| Title       | Domain Model |
-| Cross References | [Use Cases 001][UC001-DM]<br/> |
+| **ID** | **Description** | Cross Reference links |
+|--------|-----------------|----------------------|
+| DM-000 | Domain Model    | [Use Cases 001][UC001-DM]<br/> |
 
 ## Diagram
 ```mermaid

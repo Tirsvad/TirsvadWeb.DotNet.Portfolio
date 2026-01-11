@@ -2,11 +2,9 @@
 
 
 ## Metadata
-| Element     | Description |
-|-------------|-------------|
-| Id          | ERD001      |
-| Title       | Entity-Relationship Diagram |
-| Cross References | [Domain model][DM]<br/>[Use Cases 001 ERD][UC001-ERD]<br/> |
+| **ID** | **Description** | Cross Reference links |
+|--------|-----------------|----------------------|
+| ERD-001 | Entity-Relationship Diagram | [Link to Doc][ERD-001-Doc] |
 
 ## Diagram
 ```mermaid
