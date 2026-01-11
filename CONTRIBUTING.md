@@ -1,5 +1,4 @@
 # Contributing
-
 Thank you for your interest in contributing! Your help is greatly appreciated.  
 This document outlines the process for contributing to the project.
 
@@ -14,10 +13,11 @@ This document outlines the process for contributing to the project.
 - Consistent naming conventions
 - XML documentation for public members
 
+See the [Code Quality Criteria] for more details.
+
 ## How Can I Contribute?
 
 ### Reporting Bugs
-
 - Open an issue on [GitHub Issues](https://github.com/TirsvadWeb/Dotnet.Portfolio/issues).
 - Use a clear and descriptive title.
 - Include steps to reproduce, expected and actual behavior, and environment details.
@@ -42,7 +42,6 @@ git checkout -b feature/YourFeatureName
 7. **Describe your changes** in the pull request and reference any related issues.
 
 ### Code Style
-
 - Follow the existing code style and conventions.
 - Use meaningful names and XML documentation where appropriate.
 - Keep methods and classes focused and concise.
@@ -62,4 +61,8 @@ See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 Open an issue or contact the maintainer via [LinkedIn](https://www.linkedin.com/in/jens-tirsvad-nielsen-13b795b9/).
 
 ---
-Thank you for helping make TirsvadWeb.JwtAuth better!
+
+Thank you for helping making this project better!
+
+<!-- LINK REFERENCES -->
+[Code Quality Criteria]: https://github.com/TirsvadWeb/DotNet.Portfolio/blob/main/docs/QualityCriteria.md "Code Quality Criteria"

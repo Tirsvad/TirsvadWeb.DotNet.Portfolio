@@ -1,0 +1,37 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="CODE_OF_CONDUCT.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="docker-compose.yml" />
+    <File Path="Dockerfile" />
+    <File Path="Doxyfile" />
+    <File Path="global.json" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="testEnvironments.json" />
+  </Folder>
+  <Folder Name="/Solution Items/docker/">
+    <File Path="docker/entrypoint.sh" />
+    <File Path="docker/run_tests.sh" />
+  </Folder>
+  <Folder Name="/Solution Items/docs/" />
+  <Folder Name="/Solution Items/docs/CopilotScripts/">
+    <File Path="docs/CopilotScripts/classBuilder.md" />
+    <File Path="docs/CopilotScripts/mstest.md" />
+    <File Path="docs/CopilotScripts/xmlDocumentation.md" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Portfolio.Core.Tests/Portfolio.Core.Tests.csproj" />
+    <Project Path="tests/Portfolio.Domain.Tests/Portfolio.Domain.Tests.csproj" />
+    <Project Path="tests/Portfolio.Infrastructure.Tests/Portfolio.Infrastructure.Tests.csproj" />
+  </Folder>
+  <Project Path="src/Portfolio.Client/Portfolio.Client.csproj" />
+  <Project Path="src/Portfolio.Core/Portfolio.Core.csproj" />
+  <Project Path="src/Portfolio.Domain/Portfolio.Domain.csproj" />
+  <Project Path="src/Portfolio.Infrastructure/Portfolio.Infrastructure.csproj" />
+  <Project Path="src/Portfolio/Portfolio.csproj" />
+</Solution>
