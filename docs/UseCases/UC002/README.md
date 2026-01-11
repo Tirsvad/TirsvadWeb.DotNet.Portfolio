@@ -5,12 +5,9 @@ It is intended to provide a comprehensive understanding of the use case, includi
 ---
 
 ## Metadata
-
-| Element     | Description |
-|-------------|-------------|
-| Use Case ID | UC-002       |
-| Title       | View and edit basic profile |
-| Level       | User Goal  |
+| **ID** | **Description** | Cross Reference links |
+|--------|-----------------|-----------------------|
+| UC-002 | View and edit basic profile | [Link to User Story](#user-story) |
 
 ---
 
