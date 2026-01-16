@@ -337,3 +337,4 @@ Doxygen is used to generate API and code documentation for this project.
 <!-- Project Links -->
 [CodeCoverageResults-url]: https://dev.tirsvad.dk/projects/TirsvadWeb/DotNet.Portfolio/codecoverage/ "Code Coverage Results"
 [doxygen-url]: https://dev.tirsvad.dk/projects/TirsvadWeb/DotNet.Portfolio/doxygen/ "doxygen"
+[QualityCriteria-url]: docs/QualityCriteria.md "Quality Criteria"

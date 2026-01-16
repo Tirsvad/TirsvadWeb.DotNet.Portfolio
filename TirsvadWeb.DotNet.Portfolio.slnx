@@ -26,6 +26,7 @@
     <File Path="docs/Generate-IdOverview.ps1" />
     <File Path="docs/IdOverview.md" />
     <File Path="docs/KPI.md" />
+    <File Path="docs/QualityCriteria.md" />
     <File Path="docs/QualityCriteriaCode.md" />
     <File Path="docs/README.md" />
     <File Path="docs/RiskAnalysis.md" />
