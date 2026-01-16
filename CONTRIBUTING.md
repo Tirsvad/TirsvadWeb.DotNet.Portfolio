@@ -46,6 +46,9 @@ git checkout -b feature/YourFeatureName
 - Use meaningful names and XML documentation where appropriate.
 - Keep methods and classes focused and concise.
 
+### Artifact Standards
+- Follow the [Quality Criteria] for artifacts.
+
 ### Commit Messages
 
 - Use clear, descriptive commit messages.
@@ -66,3 +69,4 @@ Thank you for helping making this project better!
 
 <!-- LINK REFERENCES -->
 [Code Quality Criteria]: https://github.com/TirsvadWeb/DotNet.Portfolio/blob/main/docs/QualityCriteria.md "Code Quality Criteria"
+[Quality Criteria]: docs/QualityCriteria.md "Quality Criteria"
